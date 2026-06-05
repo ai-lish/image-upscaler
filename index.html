@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>圖片像素提升工具 — Image Upscaler</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #1a1d23;
+    --panel-2: #232830;
+    --border: #2d333c;
+    --text: #e6e8eb;
+    --text-dim: #8b95a3;
+    --accent: #4f9eff;
+    --accent-hover: #6db0ff;
+    --success: #4ade80;
+    --warning: #fbbf24;
+    --danger: #ef4444;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  .header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .header h1 {
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .header .badge {
+    font-size: 11px;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+
+  .container {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 20px;
+    padding: 20px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 900px) {
+    .container { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 14px;
+  }
+
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 36px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--bg);
+  }
+  .upload-zone:hover, .upload-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(79, 158, 255, 0.05);
+  }
+  .upload-zone .icon {
+    font-size: 36px;
+    margin-bottom: 8px;
+    opacity: 0.7;
+  }
+  .upload-zone .label {
+    font-size: 14px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .upload-zone .sublabel {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .upload-zone input { display: none; }
+
+  .setting {
+    margin-bottom: 16px;
+  }
+  .setting label {
+    display: block;
+    font-size: 13px;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+  .setting .hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+  .setting input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .setting select {
+    width: 100%;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+  }
+  .row > * { flex: 1; }
+
+  .btn {
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn:hover:not(:disabled) { background: var(--accent-hover); }
+  .btn:disabled {
+    background: var(--panel-2);
+    color: var(--text-dim);
+    cursor: not-allowed;
+  }
+  .btn-secondary {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover:not(:disabled) { background: var(--border); }
+
+  .preview {
+    min-height: 500px;
+    display: flex;
+    flex-direction: column;
+  }
+  .preview-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+
+  .preview-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .tab-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .tab-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .info-chip {
+    font-size: 11px;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+  }
+  .info-chip.success { color: var(--success); }
+
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    background:
+      linear-gradient(45deg, #1a1d23 25%, transparent 25%),
+      linear-gradient(-45deg, #1a1d23 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #1a1d23 75%),
+      linear-gradient(-45deg, transparent 75%, #1a1d23 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+    background-color: #14171c;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+  }
+  .canvas-wrap canvas {
+    max-width: 100%;
+    max-height: 70vh;
+    image-rendering: -webkit-optimize-contrast;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+
+  .compare-wrap {
+    position: relative;
+    width: 100%;
+    height: 70vh;
+    overflow: hidden;
+    border-radius: 8px;
+  }
+  .compare-wrap canvas {
+    position: absolute;
+    top: 0; left: 0;
+    max-width: none;
+    max-height: none;
+    image-rendering: -webkit-optimize-contrast;
+  }
+  .compare-slider {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    cursor: ew-resize;
+    z-index: 10;
+  }
+  .compare-slider::after {
+    content: '⇄';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--accent);
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  }
+
+  .progress {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--accent);
+    z-index: 1000;
+    transition: width 0.2s;
+  }
+  .progress.hidden { display: none; }
+
+  .actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .stats {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    font-family: monospace;
+  }
+</style>
+</head>
+<body>
+<div class="progress hidden" id="progress"></div>
+
+<div class="header">
+  <h1>🖼 圖片像素提升工具</h1>
+  <span class="badge">純前端 · 離線可用</span>
+</div>
+
+<div class="container">
+  <!-- LEFT PANEL: CONTROLS -->
+  <div>
+    <div class="panel" style="margin-bottom: 16px;">
+      <h2>1️⃣ 上傳圖片</h2>
+      <label class="upload-zone" id="dropzone">
+        <div class="icon">📁</div>
+        <div class="label">拖拽圖片到呢度</div>
+        <div class="sublabel">或者點擊選擇 · 支援 PNG / JPG / WebP</div>
+        <input type="file" id="fileInput" accept="image/*">
+      </label>
+    </div>
+
+    <div class="panel" style="margin-bottom: 16px;">
+      <h2>2️⃣ 放大設定</h2>
+
+      <div class="setting">
+        <label>放大比例</label>
+        <div class="row">
+          <button class="btn btn-secondary" data-scale="2">2×</button>
+          <button class="btn btn-secondary" data-scale="3">3×</button>
+          <button class="btn btn-secondary" data-scale="4">4×</button>
+          <button class="btn btn-secondary" data-scale="custom">自訂</button>
+        </div>
+        <input type="range" id="customScale" min="1.1" max="8" step="0.1" value="2" style="margin-top:8px;display:none">
+        <div class="hint" id="scaleHint">2 倍放大</div>
+      </div>
+
+      <div class="setting">
+        <label>重採樣演算法</label>
+        <select id="algorithm">
+          <option value="lanczos3" selected>Lanczos3 — 最清晰（推薦）</option>
+          <option value="lanczos2">Lanczos2 — 平衡</option>
+          <option value="bicubic">Bicubic — 標準</option>
+          <option value="bilinear">Bilinear — 最快</option>
+          <option value="nearest">Nearest — 像素風格</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom: 16px;">
+      <h2>3️⃣ 增強效果</h2>
+
+      <div class="setting">
+        <label>銳化強度: <span id="sharpenVal">0</span></label>
+        <input type="range" id="sharpen" min="0" max="200" step="5" value="0">
+        <div class="hint">適合文字、線條、教材</div>
+      </div>
+
+      <div class="setting">
+        <label>降噪: <span id="denoiseVal">0</span></label>
+        <input type="range" id="denoise" min="0" max="100" step="5" value="0">
+        <div class="hint">減少 JPEG 壓縮失真</div>
+      </div>
+
+      <div class="setting">
+        <label>對比度: <span id="contrastVal">100</span>%</label>
+        <input type="range" id="contrast" min="50" max="200" step="5" value="100">
+      </div>
+
+      <div class="setting">
+        <label>亮度: <span id="brightnessVal">0</span></label>
+        <input type="range" id="brightness" min="-50" max="50" step="2" value="0">
+      </div>
+    </div>
+
+    <button class="btn" id="processBtn" disabled>⚡ 開始處理</button>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <!-- RIGHT PANEL: PREVIEW -->
+  <div class="panel preview">
+    <div class="preview-controls">
+      <button class="tab-btn active" data-view="result">處理結果</button>
+      <button class="tab-btn" data-view="compare">對比預覽</button>
+      <button class="tab-btn" data-view="original">原圖</button>
+      <div style="flex:1"></div>
+      <span class="info-chip" id="dimChip">未上傳</span>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap">
+      <div class="preview-empty">⬅ 請先上傳圖片</div>
+    </div>
+    <div class="actions" id="actions" style="display:none">
+      <button class="btn" id="downloadBtn">💾 下載 PNG</button>
+      <button class="btn btn-secondary" id="downloadJpgBtn">下載 JPG</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ============ STATE ============
+const state = {
+  sourceImage: null,      // HTMLImageElement
+  sourceCanvas: null,     // source canvas
+  resultCanvas: null,     // processed canvas
+  scale: 2,
+  view: 'result',
+};
+
+// ============ UPLOAD ============
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+function loadFile(file) {
+  if (!file.type.startsWith('image/')) { alert('請上傳圖片檔案'); return; }
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      state.sourceImage = img;
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+      state.sourceCanvas = c;
+      document.getElementById('processBtn').disabled = false;
+      document.getElementById('dimChip').textContent = `${img.naturalWidth} × ${img.naturalHeight}`;
+      document.getElementById('dimChip').classList.add('success');
+      showOriginal();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ============ SCALE BUTTONS ============
+document.querySelectorAll('[data-scale]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-scale]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const v = btn.dataset.scale;
+    const slider = document.getElementById('customScale');
+    if (v === 'custom') {
+      slider.style.display = 'block';
+      state.scale = parseFloat(slider.value);
+    } else {
+      slider.style.display = 'none';
+      state.scale = parseFloat(v);
+    }
+    document.getElementById('scaleHint').textContent = `${state.scale.toFixed(1)} 倍放大`;
+  });
+});
+// Default 2x active
+document.querySelector('[data-scale="2"]').classList.add('active');
+document.getElementById('customScale').addEventListener('input', e => {
+  state.scale = parseFloat(e.target.value);
+  document.getElementById('scaleHint').textContent = `${state.scale.toFixed(1)} 倍放大`;
+});
+
+// ============ SLIDERS ============
+['sharpen', 'denoise', 'contrast', 'brightness'].forEach(id => {
+  document.getElementById(id).addEventListener('input', e => {
+    const valSpan = document.getElementById(id + 'Val');
+    if (id === 'contrast') valSpan.textContent = e.target.value;
+    else if (id === 'brightness') valSpan.textContent = e.target.value;
+    else valSpan.textContent = e.target.value;
+  });
+});
+
+// ============ VIEW TABS ============
+document.querySelectorAll('[data-view]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-view]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.view = btn.dataset.view;
+    if (state.view === 'original') showOriginal();
+    else if (state.view === 'result' && state.resultCanvas) showResult();
+    else if (state.view === 'compare' && state.resultCanvas) showCompare();
+  });
+});
+
+function showOriginal() {
+  const wrap = document.getElementById('canvasWrap');
+  wrap.innerHTML = '';
+  if (!state.sourceCanvas) {
+    wrap.innerHTML = '<div class="preview-empty">⬅ 請先上傳圖片</div>';
+    return;
+  }
+  const c = state.sourceCanvas;
+  const disp = document.createElement('canvas');
+  // Fit display
+  const maxW = wrap.clientWidth - 32, maxH = wrap.clientHeight - 32;
+  const ratio = Math.min(maxW / c.width, maxH / c.height, 1);
+  disp.width = c.width * ratio; disp.height = c.height * ratio;
+  disp.getContext('2d').drawImage(c, 0, 0, disp.width, disp.height);
+  wrap.appendChild(disp);
+}
+
+// ============ PROCESS ============
+document.getElementById('processBtn').addEventListener('click', async () => {
+  if (!state.sourceImage) return;
+  const btn = document.getElementById('processBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 處理中...';
+  setProgress(10);
+
+  const algo = document.getElementById('algorithm').value;
+  const sharpen = parseInt(document.getElementById('sharpen').value);
+  const denoise = parseInt(document.getElementById('denoise').value);
+  const contrast = parseInt(document.getElementById('contrast').value);
+  const brightness = parseInt(document.getElementById('brightness').value);
+
+  await sleep(20); setProgress(20);
+  // 1) Upscale
+  const upscaled = await upscale(state.sourceCanvas, state.scale, algo);
+  setProgress(60);
+  await sleep(20);
+
+  // 2) Post-process
+  const final = await postProcess(upscaled, { sharpen, denoise, contrast, brightness });
+  setProgress(95);
+  state.resultCanvas = final;
+  setProgress(100);
+  setTimeout(() => setProgress(0), 300);
+
+  btn.disabled = false;
+  btn.textContent = '⚡ 開始處理';
+  document.getElementById('actions').style.display = 'flex';
+  document.getElementById('dimChip').textContent = `${state.sourceCanvas.width}×${state.sourceCanvas.height} → ${final.width}×${final.height}`;
+  document.getElementById('stats').textContent = `輸出 ${final.width}×${final.height}px`;
+
+  // Auto switch to result view
+  document.querySelector('[data-view="result"]').click();
+});
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function setProgress(pct) {
+  const p = document.getElementById('progress');
+  if (pct <= 0) { p.classList.add('hidden'); return; }
+  p.classList.remove('hidden');
+  p.style.width = pct + '%';
+}
+
+// ============ UPSCALE ============
+async function upscale(srcCanvas, scale, algo) {
+  const dstW = Math.round(srcCanvas.width * scale);
+  const dstH = Math.round(srcCanvas.height * scale);
+  const srcCtx = srcCanvas.getContext('2d');
+  const srcData = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+  const dstCanvas = document.createElement('canvas');
+  dstCanvas.width = dstW; dstCanvas.height = dstH;
+  const dstCtx = dstCanvas.getContext('2d');
+  const dstData = dstCtx.createImageData(dstW, dstH);
+
+  if (algo === 'lanczos3' || algo === 'lanczos2' || algo === 'bicubic' || algo === 'bilinear' || algo === 'nearest') {
+    resample(srcData, dstData, algo);
+  }
+  dstCtx.putImageData(dstData, 0, 0);
+  return dstCanvas;
+}
+
+function resample(src, dst, algo) {
+  const sw = src.width, sh = src.height, sc = sw * sh * 4;
+  const dw = dst.width, dh = dst.height;
+  const srcPx = src.data, dstPx = dst.data;
+  const scaleX = sw / dw, scaleY = sh / dh;
+  const aSize = (algo === 'lanczos3') ? 3 : (algo === 'lanczos2') ? 2 : 2;
+
+  for (let dy = 0; dy < dh; dy++) {
+    const sy = dy * scaleY;
+    const y0 = Math.max(0, Math.floor(sy - aSize));
+    const y1 = Math.min(sh - 1, Math.ceil(sy + aSize));
+    for (let dx = 0; dx < dw; dx++) {
+      const sx = dx * scaleX;
+      const x0 = Math.max(0, Math.floor(sx - aSize));
+      const x1 = Math.min(sw - 1, Math.ceil(sx + aSize));
+
+      let r = 0, g = 0, b = 0, a = 0, wsum = 0;
+      for (let yi = y0; yi <= y1; yi++) {
+        const wy = weight(sy - yi, algo);
+        for (let xi = x0; xi <= x1; xi++) {
+          const wx = weight(sx - xi, algo);
+          const w = wx * wy;
+          if (w === 0) continue;
+          const idx = (yi * sw + xi) * 4;
+          r += srcPx[idx] * w;
+          g += srcPx[idx+1] * w;
+          b += srcPx[idx+2] * w;
+          a += srcPx[idx+3] * w;
+          wsum += w;
+        }
+      }
+      const di = (dy * dw + dx) * 4;
+      if (wsum > 0) {
+        dstPx[di] = r / wsum;
+        dstPx[di+1] = g / wsum;
+        dstPx[di+2] = b / wsum;
+        dstPx[di+3] = a / wsum;
+      }
+    }
+  }
+}
+
+function weight(x, algo) {
+  x = Math.abs(x);
+  if (algo === 'nearest') return x < 0.5 ? 1 : 0;
+  if (algo === 'bilinear') return x < 1 ? 1 - x : 0;
+  if (algo === 'bicubic') {
+    if (x < 1) return (1.5 * x - 2.5) * x * x + 1;
+    if (x < 2) return ((-0.5 * x + 2.5) * x - 4) * x + 2;
+    return 0;
+  }
+  // Lanczos
+  const a = algo === 'lanczos3' ? 3 : 2;
+  if (x === 0) return 1;
+  if (x >= a) return 0;
+  return sinc(x) * sinc(x / a);
+}
+function sinc(x) {
+  if (x === 0) return 1;
+  const px = Math.PI * x;
+  return Math.sin(px) / px;
+}
+
+// ============ POST PROCESS ============
+async function postProcess(canvas, opts) {
+  const ctx = canvas.getContext('2d');
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = img.data;
+
+  // 1) Denoise (3x3 box blur weighted)
+  if (opts.denoise > 0) {
+    const strength = opts.denoise / 100;
+    const tmp = new Uint8ClampedArray(d);
+    const w = canvas.width, h = canvas.height;
+    for (let y = 1; y < h-1; y++) {
+      for (let x = 1; x < w-1; x++) {
+        const i = (y * w + x) * 4;
+        for (let c = 0; c < 3; c++) {
+          let sum = 0;
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++)
+              sum += tmp[((y+dy) * w + (x+dx)) * 4 + c];
+          d[i+c] = tmp[i+c] * (1-strength) + (sum/9) * strength;
+        }
+      }
+    }
+  }
+
+  // 2) Contrast + Brightness
+  if (opts.contrast !== 100 || opts.brightness !== 0) {
+    const c = opts.contrast / 100;
+    const b = opts.brightness * 2.55; // -127..127
+    const c2 = c * 255;
+    const t = 128 * (1 - c) + b;
+    for (let i = 0; i < d.length; i += 4) {
+      d[i]   = clamp(d[i]   * c + t);
+      d[i+1] = clamp(d[i+1] * c + t);
+      d[i+2] = clamp(d[i+2] * c + t);
+    }
+  }
+
+  // 3) Sharpen (unsharp mask)
+  if (opts.sharpen > 0) {
+    const amount = opts.sharpen / 100;
+    const tmp = new Uint8ClampedArray(d);
+    const w = canvas.width, h = canvas.height;
+    // 3x3 sharpen kernel
+    const kernel = [0, -1, 0, -1, 5, -1, 0, -1, 0];
+    for (let y = 1; y < h-1; y++) {
+      for (let x = 1; x < w-1; x++) {
+        const i = (y * w + x) * 4;
+        for (let c = 0; c < 3; c++) {
+          let val = 0;
+          let k = 0;
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++) {
+              val += tmp[((y+dy) * w + (x+dx)) * 4 + c] * kernel[k++];
+            }
+          d[i+c] = clamp(tmp[i+c] * (1-amount) + val * amount);
+        }
+      }
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
+function clamp(v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
+
+// ============ PREVIEW ============
+function showResult() {
+  const wrap = document.getElementById('canvasWrap');
+  wrap.innerHTML = '';
+  if (!state.resultCanvas) {
+    wrap.innerHTML = '<div class="preview-empty">未處理 · 點擊「開始處理」</div>';
+    return;
+  }
+  const c = state.resultCanvas;
+  const disp = document.createElement('canvas');
+  const maxW = wrap.clientWidth - 32, maxH = wrap.clientHeight - 32;
+  const ratio = Math.min(maxW / c.width, maxH / c.height, 1);
+  disp.width = c.width * ratio; disp.height = c.height * ratio;
+  disp.getContext('2d').drawImage(c, 0, 0, disp.width, disp.height);
+  wrap.appendChild(disp);
+}
+
+function showCompare() {
+  const wrap = document.getElementById('canvasWrap');
+  wrap.innerHTML = '';
+  if (!state.resultCanvas) return;
+
+  // Build compare wrap
+  const container = document.createElement('div');
+  container.className = 'compare-wrap';
+  container.style.position = 'relative';
+  container.style.width = '100%';
+  container.style.height = '70vh';
+
+  const orig = state.sourceCanvas;
+  const res = state.resultCanvas;
+  // Display at result resolution
+  const dispOrig = document.createElement('canvas');
+  const dispRes = document.createElement('canvas');
+  dispOrig.width = res.width; dispOrig.height = res.height;
+  dispRes.width = res.width; dispRes.height = res.height;
+  dispOrig.getContext('2d').drawImage(orig, 0, 0, res.width, res.height);
+  dispRes.getContext('2d').drawImage(res, 0, 0);
+
+  // Scale to fit
+  const maxW = wrap.clientWidth - 32, maxH = wrap.clientHeight - 32;
+  const ratio = Math.min(maxW / res.width, maxH / res.height, 1);
+  const w = res.width * ratio, h = res.height * ratio;
+  [dispOrig, dispRes].forEach(c => {
+    c.style.width = w + 'px';
+    c.style.height = h + 'px';
+  });
+  container.style.width = w + 'px';
+  container.style.height = h + 'px';
+  container.style.margin = 'auto';
+
+  const slider = document.createElement('div');
+  slider.className = 'compare-slider';
+  slider.style.left = '50%';
+  slider.style.height = h + 'px';
+
+  // Clip result
+  function updateSlider(pct) {
+    const clipX = w * pct;
+    dispRes.style.clipPath = `inset(0 0 0 ${clipX}px)`;
+    slider.style.left = clipX + 'px';
+  }
+  updateSlider(0.5);
+
+  let dragging = false;
+  const startDrag = e => { dragging = true; e.preventDefault(); };
+  const endDrag = () => { dragging = false; };
+  const onMove = e => {
+    if (!dragging) return;
+    const rect = container.getBoundingClientRect();
+    const x = (e.clientX || e.touches?.[0]?.clientX) - rect.left;
+    updateSlider(Math.max(0, Math.min(1, x / w)));
+  };
+  slider.addEventListener('mousedown', startDrag);
+  slider.addEventListener('touchstart', startDrag);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('touchmove', onMove);
+  window.addEventListener('mouseup', endDrag);
+  window.addEventListener('touchend', endDrag);
+  container.addEventListener('click', e => {
+    if (e.target === slider) return;
+    const rect = container.getBoundingClientRect();
+    updateSlider(Math.max(0, Math.min(1, (e.clientX - rect.left) / w)));
+  });
+
+  container.appendChild(dispOrig);
+  container.appendChild(dispRes);
+  container.appendChild(slider);
+  wrap.appendChild(container);
+}
+
+// ============ DOWNLOAD ============
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  if (!state.resultCanvas) return;
+  state.resultCanvas.toBlob(blob => saveBlob(blob, 'upscaled.png'), 'image/png');
+});
+document.getElementById('downloadJpgBtn').addEventListener('click', () => {
+  if (!state.resultCanvas) return;
+  state.resultCanvas.toBlob(blob => saveBlob(blob, 'upscaled.jpg'), 'image/jpeg', 0.95);
+});
+function saveBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+</script>
+</body>
+</html>
