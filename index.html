@@ -489,7 +489,11 @@ const state = {
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 
-dropzone.addEventListener('click', () => fileInput.click());
+// Click handler: only trigger fileInput if the click target is NOT the input itself
+// (avoids double-trigger from native <label> behavior)
+dropzone.addEventListener('click', (e) => {
+  if (e.target !== fileInput) fileInput.click();
+});
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
 dropzone.addEventListener('drop', e => {
