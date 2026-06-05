@@ -105,6 +105,30 @@
     color: var(--text-dim);
   }
   .upload-zone input { display: none; }
+  .upload-actions {
+    margin-top: 16px;
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+  .upload-actions .btn {
+    width: auto;
+    padding: 8px 18px;
+    font-size: 13px;
+  }
+  .paste-hint {
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .paste-hint kbd {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-family: monospace;
+    font-size: 10px;
+  }
 
   .setting {
     margin-bottom: 16px;
@@ -338,12 +362,16 @@
   <div>
     <div class="panel" style="margin-bottom: 16px;">
       <h2>1️⃣ 上傳圖片</h2>
-      <label class="upload-zone" id="dropzone">
+      <div class="upload-zone" id="dropzone">
         <div class="icon">📁</div>
         <div class="label">拖拽圖片到呢度</div>
-        <div class="sublabel">或者點擊選擇 · 支援 PNG / JPG / WebP</div>
-        <input type="file" id="fileInput" accept="image/*">
-      </label>
+        <div class="sublabel">或者用以下方式</div>
+        <div class="upload-actions">
+          <button type="button" id="uploadBtn" class="btn">📂 選擇檔案</button>
+        </div>
+        <div class="paste-hint">💡 或者 <kbd>Ctrl</kbd> + <kbd>V</kbd> 直接貼上剪貼簿嘅圖</div>
+      </div>
+      <input type="file" id="fileInput" accept="image/*" style="display:none">
     </div>
 
     <div class="panel" style="margin-bottom: 16px;">
@@ -488,12 +516,21 @@ const state = {
 // ============ UPLOAD ============
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
+const uploadBtn = document.getElementById('uploadBtn');
 
-// Click handler: only trigger fileInput if the click target is NOT the input itself
-// (avoids double-trigger from native <label> behavior)
-dropzone.addEventListener('click', (e) => {
-  if (e.target !== fileInput) fileInput.click();
+// Use explicit button click to avoid label/native behavior conflicts
+uploadBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  e.preventDefault();
+  fileInput.click();
 });
+
+// Dropzone click: only triggers file picker when click is on background, not on the button
+dropzone.addEventListener('click', (e) => {
+  if (e.target.closest('button')) return; // ignore button clicks
+  fileInput.click();
+});
+
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
 dropzone.addEventListener('drop', e => {
@@ -502,6 +539,21 @@ dropzone.addEventListener('drop', e => {
   if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
 });
 fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+// Paste image from clipboard (Ctrl+V anywhere on page)
+document.addEventListener('paste', e => {
+  if (!e.clipboardData) return;
+  for (const item of e.clipboardData.items) {
+    if (item.type && item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) {
+        loadFile(file);
+        e.preventDefault();
+      }
+      break;
+    }
+  }
+});
 
 function loadFile(file) {
   if (!file.type.startsWith('image/')) { alert('請上傳圖片檔案'); return; }
