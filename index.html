@@ -129,6 +129,22 @@
     font-family: monospace;
     font-size: 10px;
   }
+  .file-info {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--accent);
+    font-family: monospace;
+    word-break: break-all;
+  }
+  .file-info.error {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: var(--danger);
+    color: var(--danger);
+  }
 
   .setting {
     margin-bottom: 16px;
@@ -381,8 +397,10 @@ window.addEventListener('error', e => {
           <button type="button" id="uploadBtn" class="btn">📂 選擇檔案</button>
         </div>
         <div class="paste-hint">💡 或者 <kbd>Ctrl</kbd> + <kbd>V</kbd> 直接貼上剪貼簿嘅圖</div>
+        <div class="paste-hint" style="margin-top:6px">💡 手機：撳「選擇檔案」後可影相或從相簿挑選</div>
       </div>
-      <input type="file" id="fileInput" accept="image/*" style="display:none">
+      <div id="fileInfo" class="file-info" style="display:none"></div>
+      <input type="file" id="fileInput" accept="image/*,image/heic,image/heif" style="display:none">
     </div>
 
     <div class="panel" style="margin-bottom: 16px;">
@@ -528,18 +546,33 @@ const state = {
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 const uploadBtn = document.getElementById('uploadBtn');
+const fileInfo = document.getElementById('fileInfo');
 
-// Use explicit button click to avoid label/native behavior conflicts
+function showFileInfo(msg, isError) {
+  fileInfo.style.display = 'block';
+  fileInfo.className = 'file-info' + (isError ? ' error' : '');
+  fileInfo.textContent = msg;
+}
+function hideFileInfo() {
+  fileInfo.style.display = 'none';
+  fileInfo.className = 'file-info';
+}
+
+// Reset input value before each click — iOS fix: picking same file twice doesn't fire change
+function openFilePicker() {
+  fileInput.value = '';
+  fileInput.click();
+}
+
 uploadBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   e.preventDefault();
-  fileInput.click();
+  openFilePicker();
 });
 
-// Dropzone click: only triggers file picker when click is on background, not on the button
 dropzone.addEventListener('click', (e) => {
-  if (e.target.closest('button')) return; // ignore button clicks
-  fileInput.click();
+  if (e.target.closest('button')) return;
+  openFilePicker();
 });
 
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
@@ -549,7 +582,10 @@ dropzone.addEventListener('drop', e => {
   dropzone.classList.remove('dragover');
   if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
 });
-fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+fileInput.addEventListener('change', e => {
+  console.log('File input change fired, files:', e.target.files.length);
+  if (e.target.files[0]) loadFile(e.target.files[0]);
+});
 
 // Paste image from clipboard (Ctrl+V anywhere on page)
 document.addEventListener('paste', e => {
@@ -557,21 +593,37 @@ document.addEventListener('paste', e => {
   for (const item of e.clipboardData.items) {
     if (item.type && item.type.startsWith('image/')) {
       const file = item.getAsFile();
-      if (file) {
-        loadFile(file);
-        e.preventDefault();
-      }
+      if (file) { loadFile(file); e.preventDefault(); }
       break;
     }
   }
 });
 
 function loadFile(file) {
-  if (!file.type.startsWith('image/')) { alert('請上傳圖片檔案'); return; }
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const img = new Image();
-    img.onload = () => {
+  console.log('loadFile:', file.name, file.type, file.size);
+  showFileInfo(`📄 ${file.name || '檔案'} · ${(file.size/1024).toFixed(1)} KB · ${file.type || 'unknown type'} · 載入中...`);
+
+  // iOS sometimes returns empty type for HEIC — try extension fallback
+  const looksLikeImage = file.type && file.type.startsWith('image/')
+    || /\.(jpe?g|png|gif|webp|bmp|heic|heif|svg)$/i.test(file.name || '');
+
+  if (!looksLikeImage) {
+    showFileInfo('❌ 唔係圖片檔案：' + (file.name || '未知'), true);
+    return;
+  }
+
+  // Use URL.createObjectURL — more reliable than FileReader on iOS
+  let blobUrl;
+  try {
+    blobUrl = URL.createObjectURL(file);
+  } catch (err) {
+    showFileInfo('❌ 載入失敗：' + err.message, true);
+    return;
+  }
+
+  const img = new Image();
+  img.onload = () => {
+    try {
       state.sourceImage = img;
       const c = document.createElement('canvas');
       c.width = img.naturalWidth;
@@ -581,11 +633,20 @@ function loadFile(file) {
       document.getElementById('processBtn').disabled = false;
       document.getElementById('dimChip').textContent = `${img.naturalWidth} × ${img.naturalHeight}`;
       document.getElementById('dimChip').classList.add('success');
+      showFileInfo(`✅ ${file.name || '圖片'} · ${img.naturalWidth}×${img.naturalHeight} · ${(file.size/1024).toFixed(1)} KB`);
       showOriginal();
-    };
-    img.src = ev.target.result;
+    } catch (err) {
+      showFileInfo('❌ 處理失敗：' + err.message, true);
+      console.error(err);
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+    }
   };
-  reader.readAsDataURL(file);
+  img.onerror = () => {
+    showFileInfo('❌ 圖片解碼失敗：' + (file.name || '') + '（iOS HEIC 需先轉 JPG）', true);
+    URL.revokeObjectURL(blobUrl);
+  };
+  img.src = blobUrl;
 }
 
 // ============ SCALE BUTTONS ============
