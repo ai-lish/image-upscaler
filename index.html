@@ -124,6 +124,15 @@
     width: 100%;
     accent-color: var(--accent);
   }
+  .setting input[type="number"] {
+    width: 100%;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 13px;
+  }
   .setting select {
     width: 100%;
     background: var(--panel-2);
@@ -349,6 +358,31 @@
     </div>
 
     <div class="panel" style="margin-bottom: 16px;">
+      <h2>📐 輸出尺寸保證（強制）</h2>
+      <div class="setting">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="enforceSize" checked>
+          強制輸出至少以下尺寸
+        </label>
+        <div class="hint" style="margin-top:8px;color:var(--warning)">
+          ⚠ 細過指定尺寸會自動再放大，保證輸出一定達標
+        </div>
+      </div>
+      <div class="setting" style="margin-bottom:0">
+        <div class="row">
+          <div>
+            <label>最小寬度 (px)</label>
+            <input type="number" id="targetW" value="1200" min="100" step="100">
+          </div>
+          <div>
+            <label>最小高度 (px)</label>
+            <input type="number" id="targetH" value="1600" min="100" step="100">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom: 16px;">
       <h2>3️⃣ 增強效果</h2>
 
       <div class="setting">
@@ -522,9 +556,24 @@ document.getElementById('processBtn').addEventListener('click', async () => {
   const contrast = parseInt(document.getElementById('contrast').value);
   const brightness = parseInt(document.getElementById('brightness').value);
 
+  // Calculate actual scale (max of user scale, target min size)
+  const srcW = state.sourceCanvas.width, srcH = state.sourceCanvas.height;
+  const enforce = document.getElementById('enforceSize').checked;
+  const targetW = parseInt(document.getElementById('targetW').value) || 0;
+  const targetH = parseInt(document.getElementById('targetH').value) || 0;
+  let targetScale = 1;
+  if (enforce && (targetW > 0 || targetH > 0)) {
+    // Scale needed so BOTH width and height meet or exceed target
+    targetScale = Math.max(
+      targetW > 0 ? targetW / srcW : 1,
+      targetH > 0 ? targetH / srcH : 1
+    );
+  }
+  const actualScale = Math.max(state.scale, targetScale);
+
   await sleep(20); setProgress(20);
   // 1) Upscale
-  const upscaled = await upscale(state.sourceCanvas, state.scale, algo);
+  const upscaled = await upscale(state.sourceCanvas, actualScale, algo);
   setProgress(60);
   await sleep(20);
 
@@ -555,8 +604,8 @@ function setProgress(pct) {
 
 // ============ UPSCALE ============
 async function upscale(srcCanvas, scale, algo) {
-  const dstW = Math.round(srcCanvas.width * scale);
-  const dstH = Math.round(srcCanvas.height * scale);
+  const dstW = Math.ceil(srcCanvas.width * scale);
+  const dstH = Math.ceil(srcCanvas.height * scale);
   const srcCtx = srcCanvas.getContext('2d');
   const srcData = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
   const dstCanvas = document.createElement('canvas');
