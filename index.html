@@ -172,6 +172,22 @@
     border: 1px solid var(--border);
   }
   .btn-secondary:hover:not(:disabled) { background: var(--border); }
+  .btn-secondary.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  .preset-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .preset-row .btn {
+    flex: 0 0 auto;
+    font-size: 12px;
+    padding: 7px 11px;
+  }
 
   .preview {
     min-height: 500px;
@@ -358,27 +374,53 @@
     </div>
 
     <div class="panel" style="margin-bottom: 16px;">
-      <h2>📐 輸出尺寸保證（強制）</h2>
+      <h2>📐 輸出尺寸</h2>
+
       <div class="setting">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-          <input type="checkbox" id="enforceSize" checked>
-          強制輸出至少以下尺寸
-        </label>
-        <div class="hint" style="margin-top:8px;color:var(--warning)">
-          ⚠ 細過指定尺寸會自動再放大，保證輸出一定達標
-        </div>
+        <label>模式</label>
+        <select id="sizeMode">
+          <option value="factor">倍數放大（X 倍）</option>
+          <option value="minimum" selected>最小保證（強制 ≥ 設定值）</option>
+          <option value="exact">精確尺寸（最終輸出 = 設定值）</option>
+        </select>
       </div>
-      <div class="setting" style="margin-bottom:0">
+
+      <div class="setting" id="minSizeGroup">
+        <label>最小尺寸 (px)</label>
         <div class="row">
           <div>
-            <label>最小寬度 (px)</label>
-            <input type="number" id="targetW" value="1200" min="100" step="100">
+            <input type="number" id="targetW" value="1200" min="1" step="50" placeholder="寬">
           </div>
           <div>
-            <label>最小高度 (px)</label>
-            <input type="number" id="targetH" value="1600" min="100" step="100">
+            <input type="number" id="targetH" value="1600" min="1" step="50" placeholder="高">
           </div>
         </div>
+        <div class="hint">細過會自動再放大；大過就用你嘅倍數</div>
+      </div>
+
+      <div class="setting" id="exactSizeGroup" style="display:none">
+        <label>精確尺寸 (px)</label>
+        <div class="row">
+          <div>
+            <input type="number" id="exactW" value="1200" min="1" step="50" placeholder="寬">
+          </div>
+          <div>
+            <input type="number" id="exactH" value="1600" min="1" step="50" placeholder="高">
+          </div>
+        </div>
+        <div class="hint">最終輸出會係呢個 size（自動調整）</div>
+      </div>
+
+      <div class="setting" style="margin-bottom:0">
+        <label>快速預設</label>
+        <div class="preset-row">
+          <button class="btn btn-secondary preset-btn active" data-w="1200" data-h="1600" data-mode="minimum" type="button">⭐ 1200×1600</button>
+          <button class="btn btn-secondary preset-btn" data-w="1920" data-h="1080" data-mode="minimum" type="button">1920×1080</button>
+          <button class="btn btn-secondary preset-btn" data-w="2480" data-h="3508" data-mode="minimum" type="button">A4 300DPI</button>
+          <button class="btn btn-secondary preset-btn" data-w="1024" data-h="768" data-mode="minimum" type="button">1024×768</button>
+          <button class="btn btn-secondary preset-btn" data-w="800" data-h="600" data-mode="minimum" type="button">800×600</button>
+        </div>
+        <div class="hint" style="margin-top:8px">撳 preset 自動填入，可以再手動改</div>
       </div>
     </div>
 
@@ -513,6 +555,34 @@ document.getElementById('customScale').addEventListener('input', e => {
   });
 });
 
+// ============ SIZE MODE + PRESETS ============
+document.getElementById('sizeMode').addEventListener('change', e => {
+  const mode = e.target.value;
+  document.getElementById('minSizeGroup').style.display = mode === 'minimum' ? 'block' : 'none';
+  document.getElementById('exactSizeGroup').style.display = mode === 'exact' ? 'block' : 'none';
+  // Clear preset highlight when user changes mode manually
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+});
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const w = parseInt(btn.dataset.w);
+    const h = parseInt(btn.dataset.h);
+    const mode = btn.dataset.mode;
+    document.getElementById('sizeMode').value = mode;
+    document.getElementById('sizeMode').dispatchEvent(new Event('change'));
+    if (mode === 'minimum') {
+      document.getElementById('targetW').value = w;
+      document.getElementById('targetH').value = h;
+    } else if (mode === 'exact') {
+      document.getElementById('exactW').value = w;
+      document.getElementById('exactH').value = h;
+    }
+  });
+});
+
 // ============ VIEW TABS ============
 document.querySelectorAll('[data-view]').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -556,20 +626,28 @@ document.getElementById('processBtn').addEventListener('click', async () => {
   const contrast = parseInt(document.getElementById('contrast').value);
   const brightness = parseInt(document.getElementById('brightness').value);
 
-  // Calculate actual scale (max of user scale, target min size)
+  // Calculate actual scale based on mode
   const srcW = state.sourceCanvas.width, srcH = state.sourceCanvas.height;
-  const enforce = document.getElementById('enforceSize').checked;
-  const targetW = parseInt(document.getElementById('targetW').value) || 0;
-  const targetH = parseInt(document.getElementById('targetH').value) || 0;
-  let targetScale = 1;
-  if (enforce && (targetW > 0 || targetH > 0)) {
-    // Scale needed so BOTH width and height meet or exceed target
-    targetScale = Math.max(
+  const mode = document.getElementById('sizeMode').value;
+  let actualScale;
+  if (mode === 'minimum') {
+    const targetW = parseInt(document.getElementById('targetW').value) || 0;
+    const targetH = parseInt(document.getElementById('targetH').value) || 0;
+    const targetScale = Math.max(
       targetW > 0 ? targetW / srcW : 1,
       targetH > 0 ? targetH / srcH : 1
     );
+    actualScale = Math.max(state.scale, targetScale);
+  } else if (mode === 'exact') {
+    const exactW = parseInt(document.getElementById('exactW').value) || 0;
+    const exactH = parseInt(document.getElementById('exactH').value) || 0;
+    actualScale = Math.max(
+      exactW > 0 ? exactW / srcW : 1,
+      exactH > 0 ? exactH / srcH : 1
+    );
+  } else {
+    actualScale = state.scale;
   }
-  const actualScale = Math.max(state.scale, targetScale);
 
   await sleep(20); setProgress(20);
   // 1) Upscale
